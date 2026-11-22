@@ -103,9 +103,13 @@ try:
     check("synthetic page opened", "PW03 synthetic page" in text(call("browser_snapshot")))
     call("browser_click", {"target": "#advance", "element": "Advance button"})
     snapshot = text(call("browser_snapshot"))
-    check("synthetic click changed state", "complete" in snapshot and "ready" not in snapshot)
+    # A data: URL includes the original fixture HTML, so checking whether
+    # the word "ready" appears anywhere in the tool response is incorrect.
     evaluated = text(call("browser_evaluate", {"function": "() => document.querySelector('#state').textContent"}))
-    check("synthetic DOM evaluation", "complete" in evaluated)
+    print("PW03_DOM_AFTER", repr(evaluated[:300]), flush=True)
+    print("PW03_SNAPSHOT_AFTER", repr(snapshot[-700:]), flush=True)
+    check("synthetic click changed live DOM", "complete" in evaluated)
+    check("snapshot contains updated paragraph", "paragraph: complete" in snapshot)
     call("browser_close")
     print("PW03_OFFLINE_MCP_PASS", flush=True)
 finally:
