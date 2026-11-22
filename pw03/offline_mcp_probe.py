@@ -2,6 +2,7 @@
 import base64
 import json
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -109,7 +110,7 @@ try:
     print("PW03_DOM_AFTER", repr(evaluated[:300]), flush=True)
     print("PW03_SNAPSHOT_AFTER", repr(snapshot[-700:]), flush=True)
     check("synthetic click changed live DOM", "complete" in evaluated)
-    check("snapshot contains updated paragraph", "paragraph: complete" in snapshot)
+    check("snapshot contains updated paragraph", bool(re.search(r"(?m)^\\s*-\\s+paragraph(?:\\s+\\[ref=[^\\]]+\\])?:\\s+complete\\s*$", snapshot)))
     call("browser_close")
     print("PW03_OFFLINE_MCP_PASS", flush=True)
 finally:
