@@ -1,0 +1,58 @@
+name: PW03 one-time Codex Playwright MCP preflight
+on:
+  push:
+    branches:
+      - research/pw03-codex-mcp-preflight
+    paths:
+      - .github/workflows/pw03-codex-preflight.yml
+permissions:
+  contents: read
+jobs:
+  offline-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Read research branch without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check isolated configuration
+        run: |
+          set -euo pipefail
+          python3 pw03/check_config.py
+          test ! -f .env
+          echo "PASS: static security preflight"
+      - name: Check Docker and pinned image
+        run: |
+          set -euo pipefail
+          docker --version
+          docker info --format '{{.ServerVersion}}'
+          timeout 180s docker pull mcr.microsoft.com/playwright/mcp@sha256:77dccc5ce9e94cb8ae7ebea87ddbb6cd54b05760c4d63c54e16accf2726b8734
+          echo "PASS: isolated browser runtime available"
+      - name: Install Codex CLI on ephemeral runner only
+        run: |
+          set -euo pipefail
+          npm install --global --no-audit --no-fund @openai/codex@latest
+          codex --version
+      - name: Verify Codex parses Playwright MCP configuration without auth
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.codex"
+          cp pw03/codex-playwright-offline.example.toml "$HOME/.codex/config.toml"
+          # Temporarily enable ONLY inside this disposable CI runner.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path.home()/'.codex/config.toml'
+          x=p.read_text()
+          assert x.count('enabled = false') == 1 and '"--network", "none"' in x
+          p.write_text(x.replace('enabled = false','enabled = true',1))
+          PY
+          timeout 30s codex mcp list | tee /tmp/pw03-mcp-list.txt
+          grep -q playwright_offline /tmp/pw03-mcp-list.txt
+          timeout 30s codex mcp get playwright_offline
+          echo "PASS: Codex CLI registered configured MCP server"
+      - name: Prove offline MCP protocol and synthetic browser without Codex login
+        run: |
+          set -euo pipefail
+          timeout 180s python3 pw03/offline_mcp_probe.py
+          echo "PASS: isolated Playwright MCP synthetic browser"
