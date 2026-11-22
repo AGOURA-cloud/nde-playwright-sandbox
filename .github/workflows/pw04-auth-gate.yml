@@ -1,0 +1,39 @@
+name: PW04 Codex agent authentication gate (no model calls)
+on:
+  push:
+    branches: [research/pw04-agent-integration-gate]
+    paths:
+      - .github/workflows/pw04-auth-gate.yml
+permissions: {}
+jobs:
+  auth-gate-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout sandbox without stored GitHub credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: RED/GREEN auth-gate unit verification
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s pw04 -p 'test_*.py' -v
+          python3 pw03/check_config.py
+      - name: Install Codex CLI on disposable runner
+        run: |
+          set -euo pipefail
+          npm install -g --no-audit --no-fund @openai/codex@0.171.0
+          codex --version
+      - name: Verify disabled-by-default Playwright MCP entry
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.codex"
+          cp pw03/codex-playwright-offline.example.toml "$HOME/.codex/config.toml"
+          codex mcp list
+          codex mcp get playwright_offline
+      - name: Detect whether Codex can authenticate (no secrets, no model calls)
+        run: |
+          set -euo pipefail
+          python3 pw04/auth_gate.py
+          echo "PW04_AGENT_EXECUTION=NOT_ATTEMPTED"
+          echo "PW04_REVIEW=Authentication required before real agent-to-MCP calls"
