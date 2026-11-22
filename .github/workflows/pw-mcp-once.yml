@@ -1,0 +1,132 @@
+name: One-time synthetic Playwright MCP verification
+on:
+  push:
+    branches: [research/pw-mcp-once]
+permissions: {}
+jobs:
+  synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve exact Microsoft image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull mcr.microsoft.com/playwright/mcp@sha256:77dccc5ce9e94cb8ae7ebea87ddbb6cd54b05760c4d63c54e16accf2726b8734
+      - name: Isolated MCP protocol and browser proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 240s python3 -u - <<'PY'
+          import json, queue, re, subprocess, threading, urllib.parse
+          
+          IMAGE = 'mcr.microsoft.com/playwright/mcp@sha256:77dccc5ce9e94cb8ae7ebea87ddbb6cd54b05760c4d63c54e16accf2726b8734'
+          NAME = 'pw-mcp-synthetic-once'
+          def docker(*args):
+              return subprocess.check_output(['docker', *args], text=True, timeout=60).strip()
+          def check(label, condition):
+              if not condition:
+                  raise AssertionError(label)
+              print('PASS ' + label, flush=True)
+          p = None
+          created = False
+          q = queue.Queue()
+          counter = 0
+          def reader():
+              for line in p.stdout:
+                  q.put(line)
+              q.put(None)
+          def send(payload):
+              p.stdin.write(json.dumps({'jsonrpc':'2.0', **payload})+'\n')
+              p.stdin.flush()
+          def rpc(method, params=None):
+              global counter
+              counter += 1
+              ident = counter
+              send({'id':ident,'method':method,'params':params or {}})
+              for _ in range(100):
+                  line = q.get(timeout=40)
+                  if line is None:
+                      raise RuntimeError('MCP stdout closed')
+                  obj = json.loads(line)
+                  if obj.get('id') == ident:
+                      return obj
+                  if 'method' in obj and 'id' in obj:
+                      send({'id':obj['id'],'error':{'code':-32601,'message':'Optional client capability unavailable'}})
+              raise RuntimeError('Unexpected MCP messages')
+          def result(method, params=None):
+              r = rpc(method, params)
+              if 'error' in r:
+                  raise RuntimeError(method + ': ' + str(r['error'].get('code')))
+              return r['result']
+          def call(name, args=None):
+              r = result('tools/call', {'name':name,'arguments':args or {}})
+              if r.get('isError'):
+                  raise RuntimeError(name + ': ' + str(r.get('content'))[:400])
+              return r
+          def txt(r):
+              return '\n'.join(x.get('text','') for x in r.get('content',[]) if x.get('type')=='text')
+          try:
+              docker('create','-i','--name',NAME,'--network','none','--cap-drop','ALL',
+                  '--security-opt','no-new-privileges','--user','node','--pids-limit','256',
+                  '--memory','2g','--shm-size','256m',IMAGE,'--isolated','--output-dir','/tmp/pw-output')
+              created = True
+              info = json.loads(docker('inspect',NAME))[0]
+              h = info['HostConfig']
+              check('Independent network none',h['NetworkMode']=='none')
+              check('No host mounts, ports, privileged mode or host namespaces',
+                    not info['Mounts'] and not h.get('Binds') and not h.get('PortBindings')
+                    and not h['Privileged'] and h.get('PidMode')!='host' and h.get('IpcMode')!='host')
+              check('Nonroot, dropped capabilities and no new privileges',
+                    info['Config']['User']=='node' and 'ALL' in h['CapDrop']
+                    and any('no-new-privileges' in s for s in h['SecurityOpt']))
+              keys = [s.split('=',1)[0] for s in info['Config']['Env']]
+              check('No credential environment keys', not any(re.search(r'TOKEN|SECRET|PASSWORD|API_KEY|CREDENTIAL|GITHUB|PROXY', k, re.I) for k in keys))
+              p = subprocess.Popen(['docker','start','-ai',NAME],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
+              threading.Thread(target=reader,daemon=True).start()
+              init = result('initialize',{'protocolVersion':'2025-06-18','capabilities':{},'clientInfo':{'name':'synthetic-offline-probe','version':'1.0.0'}})
+              check('MCP initialize', bool(init.get('protocolVersion')) and bool(init.get('serverInfo')) and 'tools' in init['capabilities'])
+              print('MCP_SERVER '+json.dumps(init['serverInfo']),flush=True)
+              send({'method':'notifications/initialized'})
+              meta = json.loads(docker('exec',NAME,'node','-e',
+                  "const fs=require('fs');const os=require('os');const p=require('/app/package.json');const c=require('/app/node_modules/playwright-core/package.json');const b=require('/app/node_modules/playwright-core/browsers.json');console.log(JSON.stringify({mcp:p.version,playwright:require('/app/node_modules/playwright/package.json').version,core:c.version,node:process.version,interfaces:Object.keys(os.networkInterfaces()),chromium:b.browsers.filter(x=>x.name==='chromium'),uid:process.getuid(),dockerSocket:fs.existsSync('/var/run/docker.sock')}))"))
+              check('Pinned runtime versions',meta['mcp']=='0.0.82' and meta['playwright']==meta['core']=='1.64.0-alpha-1789764292000')
+              check('Runtime loopback only and nonroot',set(meta['interfaces'])=={'lo'} and meta['uid']!=0 and not meta['dockerSocket'])
+              print('RUNTIME_VERSIONS '+json.dumps(meta),flush=True)
+              tools = {x['name']:x for x in result('tools/list')['tools']}
+              check('MCP tool discovery',{'browser_navigate','browser_snapshot','browser_click','browser_evaluate','browser_close','browser_take_screenshot'} <= tools.keys())
+              html = '<!doctype html><html><head><title>Offline fixture</title></head><body><h1>Synthetic test</h1><button id="advance" onclick="document.getElementById(&quot;state&quot;).textContent=&quot;Fixture complete&quot;">Advance</button><p id="state">Fixture ready</p></body></html>'
+              call('browser_navigate',{'url':'data:text/html,' + urllib.parse.quote(html)})
+              snap = txt(call('browser_snapshot'))
+              check('Synthetic navigation and accessibility snapshot','Synthetic test' in snap and 'Fixture ready' in snap and 'Advance' in snap)
+              call('browser_click',{'target':'#advance','element':'Advance button'})
+              after = txt(call('browser_snapshot'))
+              check('Click changes synthetic page state','Fixture complete' in after and 'Fixture ready' not in after)
+              read = txt(call('browser_evaluate',{'function':"() => ({state: document.querySelector('#state').textContent, ua: navigator.userAgent})"}))
+              check('Independent DOM state read','Fixture complete' in read and 'Chrome/' in read)
+              print('BROWSER_READ '+read[:1000],flush=True)
+              call('browser_take_screenshot',{'type':'png','filename':'fixture.png','scale':'css'})
+              check('Actual PNG screenshot stored',docker('exec',NAME,'node','-e',"const f=require('fs').readFileSync('/tmp/pw-output/fixture.png');console.log(f.length>24&&f.subarray(0,8).toString('hex')==='89504e470d0a1a0a'?'yes':'no')")=='yes')
+              bad=rpc('tools/call',{'name':'fictional_nonexistent_tool','arguments':{}})
+              check('Unknown tool rejected','error' in bad or bad.get('result',{}).get('isError') is True)
+              call('browser_close')
+              check('Browser close acknowledged',True)
+          finally:
+              if p is not None:
+                  try:
+                      p.stdin.close()
+                      p.wait(timeout=10)
+                  except (OSError,subprocess.TimeoutExpired):
+                      p.kill()
+                      p.wait(timeout=5)
+              if created:
+                  docker('rm','-f','-v',NAME)
+                  check('Container removed',not docker('ps','-a','--filter','name=^/'+NAME+'$','--format','{{.Names}}'))
+          print('PW_MCP_RUNTIME_PASS',flush=True)
+          PY
+      - name: Guaranteed container cleanup
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f -v pw-mcp-synthetic-once 2>/dev/null || true
+          test -z "$(docker ps -a --filter 'name=^/pw-mcp-synthetic-once$' --format '{{.Names}}')"
