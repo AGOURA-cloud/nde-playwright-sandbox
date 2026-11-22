@@ -1,0 +1,26 @@
+# PW-03: inert preparation for a separately trusted Codex environment.
+# This example does NOT activate on its own. Do not copy to a live config until
+# Docker support and the no-network sandbox have been reviewed.
+[mcp_servers.playwright_offline]
+enabled = false
+required = false
+command = "docker"
+args = [
+  "run", "--rm", "-i", "--init",
+  "--network", "none",
+  "--cap-drop", "ALL",
+  "--security-opt", "no-new-privileges",
+  "--user", "node",
+  "--pids-limit", "256",
+  "--memory", "2g",
+  "--shm-size", "256m",
+  "mcr.microsoft.com/playwright/mcp@sha256:77dccc5ce9e94cb8ae7ebea87ddbb6cd54b05760c4d63c54e16accf2726b8734",
+  "--isolated", "--output-dir", "/tmp/pw-output"
+]
+startup_timeout_sec = 45
+tool_timeout_sec = 90
+default_tools_approval_mode = "prompt"
+enabled_tools = [
+  "browser_navigate", "browser_snapshot", "browser_click",
+  "browser_evaluate", "browser_take_screenshot", "browser_close"
+]
