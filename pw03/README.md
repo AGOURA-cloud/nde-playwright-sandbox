@@ -1,6 +1,6 @@
 # NOVA development tooling — PW-03 isolated Codex MCP preflight
 
-## Status: PREPARED, NOT CONNECTED
+## Status: OFFLINE CI PREFLIGHT PASSED — NOT CONNECTED TO CHATGPT
 
 Research-only: the purpose is to help the assistant build/test NOVA, **not** to add Playwright to NOVA's trading system. PW-01 research and PW-02 isolated browser/MCP tests were previously done on `research/pw-mcp-once`. This branch retains that workflow unchanged.
 
@@ -23,3 +23,21 @@ Passing the original 15/15 GitHub Actions synthetic assertions proves the isolat
 Run `python3 check_config.py` from this directory (Python 3.11+). This checks the inert example, not live MCP communication.
 
 References: `microsoft/playwright-mcp` and OpenAI's official Codex MCP documentation.
+
+
+## Verified one-time CI preflight (2026-11-22 UTC)
+
+**Result: PASS** — https://github.com/AGOURA-cloud/nde-playwright-sandbox/actions/runs/45062362778
+
+- GitHub Actions Ubuntu 24.04 Docker runtime and pinned Playwright MCP image: PASS
+- Disconnected synthetic container: no network, mounts, ports, privileges, or root user: PASS
+- OpenAI Codex CLI 0.171.0 installed on disposable runner: PASS
+- `codex mcp list` and `codex mcp get playwright_offline` with locally enabled config: PASS
+- Direct MCP JSON-RPC initialization and tool discovery: PASS
+- Synthetic data-URL navigation, browser click, DOM state, accessibility snapshot: PASS
+- Browser close and removal of the isolated container: PASS
+- No API keys, trading accounts, NOVA production or Cloudflare deployments used.
+
+**Scope caveat:** `codex mcp list/get` validates CLI registration only. Browser interactions were executed by a standalone offline JSON-RPC probe, **not** by an authenticated Codex reasoning agent and **not** by this ChatGPT conversation. PW-03 runtime preflight is complete; actual agent-to-Playwright authorization/integration remains pending. The committed example remains `enabled = false`.
+
+The previous failed CI runs revealed two *test harness assertion* defects (an uncommitted probe on the first run, then mistakenly matching the original data URL and neglecting Playwright's accessibility ref IDs). Both were corrected in this branch; no Playwright server or strategy logic was modified. The final run passed all steps.
