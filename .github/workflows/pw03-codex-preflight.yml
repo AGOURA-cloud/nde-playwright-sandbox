@@ -5,6 +5,7 @@ on:
       - research/pw03-codex-mcp-preflight
     paths:
       - .github/workflows/pw03-codex-preflight.yml
+      - pw03/offline_mcp_probe.py
 permissions:
   contents: read
 jobs:
