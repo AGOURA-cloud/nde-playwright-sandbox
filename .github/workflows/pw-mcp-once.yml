@@ -105,8 +105,13 @@ jobs:
               read = txt(call('browser_evaluate',{'function':"() => ({state: document.querySelector('#state').textContent, ua: navigator.userAgent})"}))
               check('Independent DOM state read','Fixture complete' in read and 'Chrome/' in read)
               print('BROWSER_READ '+read[:1000],flush=True)
-              call('browser_take_screenshot',{'type':'png','filename':'fixture.png','scale':'css'})
-              check('Actual PNG screenshot stored',docker('exec',NAME,'node','-e',"const f=require('fs').readFileSync('/tmp/pw-output/fixture.png');console.log(f.length>24&&f.subarray(0,8).toString('hex')==='89504e470d0a1a0a'?'yes':'no')")=='yes')
+              shot = call('browser_take_screenshot',{'type':'png','filename':'fixture.png','scale':'css'})
+              # Validate actual PNG bytes in a returned image or the newly written fixture, not an assumed path.
+              import base64
+              images = [c for c in shot.get('content',[]) if c.get('type')=='image' and c.get('mimeType')=='image/png']
+              inline = any(base64.b64decode(c['data'],validate=True).startswith(b'\x89PNG\r\n\x1a\n') for c in images)
+              stored = docker('exec',NAME,'node','-e',"const fs=require('fs'),path=require('path');let hits=[];function scan(d,depth){if(depth>8||!fs.existsSync(d))return;for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory()&&!e.name.startsWith('.')&&e.name!=='node_modules')scan(p,depth+1);else if(e.isFile()&&e.name==='fixture.png'){const b=fs.readFileSync(p);if(b.length>24&&b.subarray(0,8).toString('hex')==='89504e470d0a1a0a')hits.push(p)}}}scan('/home/node',0);scan('/tmp/pw-output',0);console.log(JSON.stringify(hits))")
+              check('Actual PNG screenshot bytes',inline or bool(json.loads(stored)))
               bad=rpc('tools/call',{'name':'fictional_nonexistent_tool','arguments':{}})
               check('Unknown tool rejected','error' in bad or bad.get('result',{}).get('isError') is True)
               call('browser_close')
