@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>PW06 disposable fixture</title></head>
+<body>
+  <h1>PW06 disposable todo</h1>
+  <input id="item" aria-label="New item" value="alpha">
+  <button id="add">Add</button><button id="reset">Reset</button>
+  <p id="count">Items: 0</p><ul id="items"></ul>
+  <script>
+    const items = document.getElementById('items');
+    const count = document.getElementById('count');
+    document.getElementById('add').addEventListener('click', () => {
+      const li = document.createElement('li');
+      li.textContent = document.getElementById('item').value;
+      items.appendChild(li);
+      count.textContent = 'Items: ' + (items.children.length + 1); // deliberate PW06 bug
+    });
+    document.getElementById('reset').addEventListener('click', () => {
+      items.replaceChildren();
+      count.textContent = 'Items: 0';
+    });
+  </script>
+</body></html>
