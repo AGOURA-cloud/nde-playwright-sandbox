@@ -12,7 +12,7 @@
       const li = document.createElement('li');
       li.textContent = document.getElementById('item').value;
       items.appendChild(li);
-      count.textContent = 'Items: ' + (items.children.length + 1); // deliberate PW06 bug
+      count.textContent = 'Items: ' + (items.children.length); // fixed in PW07
     });
     document.getElementById('reset').addEventListener('click', () => {
       items.replaceChildren();
