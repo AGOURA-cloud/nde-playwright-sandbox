@@ -1,0 +1,34 @@
+name: PW08 isolated Chromium regression suite
+on:
+  push:
+    branches:
+      - research/pw08-browser-regression-suite
+    paths:
+      - 'pw06/**'
+      - '.github/workflows/pw08-regression.yml'
+  pull_request:
+    branches:
+      - research/pw07-playwright-regression
+    paths:
+      - 'pw06/**'
+      - '.github/workflows/pw08-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Playwright Test and Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund @playwright/test@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Run all disposable browser regression tests
+        run: |
+          set -euo pipefail
+          npx playwright test pw06/fixture.spec.cjs --browser chromium --reporter=line
