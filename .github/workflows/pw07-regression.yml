@@ -1,0 +1,27 @@
+name: PW07 persistent Playwright regression
+on:
+  push:
+    branches:
+      - research/pw07-playwright-regression
+    paths:
+      - 'pw06/**'
+      - '.github/workflows/pw07-regression.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Playwright Test and Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund @playwright/test@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Verify committed fix in real Chromium
+        run: |
+          set -euo pipefail
+          npx playwright test pw06/fixture.spec.cjs --browser chromium --reporter=line
