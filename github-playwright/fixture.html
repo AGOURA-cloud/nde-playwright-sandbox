@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Disposable Playwright smoke fixture</title>
+<body><h1>Playwright GitHub Actions fixture</h1>
+<input aria-label="New item" id="item" value="alpha">
+<button id="add">Add</button><button id="reset">Reset</button>
+<ul id="items"></ul><p id="count">Items: 0</p>
+<script>
+const items = document.getElementById('items');
+const count = document.getElementById('count');
+function update(){count.textContent = 'Items: ' + items.children.length;}
+document.getElementById('add').addEventListener('click',()=>{
+ const li=document.createElement('li');li.textContent=document.getElementById('item').value;
+ items.appendChild(li);update();
+});
+document.getElementById('reset').addEventListener('click',()=>{items.replaceChildren();update();});
+</script></body></html>
