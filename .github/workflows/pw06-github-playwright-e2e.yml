@@ -1,0 +1,49 @@
+name: PW06 GitHub Playwright RED-GREEN proof
+on:
+  push:
+    branches:
+      - research/pw06-github-playwright-e2e
+    paths:
+      - '.github/workflows/pw06-github-playwright-e2e.yml'
+      - 'pw06/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install ephemeral Playwright Test
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund @playwright/test@1.58.2
+          npx playwright install --with-deps chromium
+      - name: RED - reproduce fixture bug in real Chromium
+        run: |
+          set -euo pipefail
+          if npx playwright test pw06/fixture.spec.cjs --browser chromium --reporter=line; then
+            echo "Unexpected PASS: deliberate fixture bug not reproduced"
+            exit 1
+          fi
+          grep -q 'items.children.length + 1' pw06/fixture.html
+          echo "EXPECTED RED: Items: 2 bug reproduced"
+      - name: GREEN - fix only disposable scratch copy
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('pw06/fixture.html')
+          s=p.read_text()
+          assert s.count('items.children.length + 1') == 1
+          p.write_text(s.replace('items.children.length + 1', 'items.children.length'))
+          PY
+          npx playwright test pw06/fixture.spec.cjs --browser chromium --reporter=line
+          echo "GREEN: Items: 1 and Reset Items: 0 verified"
+      - name: Summarize proof
+        if: always()
+        run: |
+          echo "PW06 GitHub Actions browser test only. No Codex agent or MCP invocation claimed." >> "$GITHUB_STEP_SUMMARY"
