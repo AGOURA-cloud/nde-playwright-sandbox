@@ -1,0 +1,35 @@
+name: GitHub Playwright Smoke
+on:
+  push:
+    branches:
+      - research/github-playwright-smoke-20261123
+    paths:
+      - 'github-playwright/**'
+      - '.github/workflows/github-playwright-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned Playwright test
+        run: npm install --no-save --no-package-lock @playwright/test@1.58.2
+      - name: Install Chromium with dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke test
+        run: npx playwright test github-playwright/smoke.spec.cjs --project=chromium
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: test-results/
+          if-no-files-found: ignore
