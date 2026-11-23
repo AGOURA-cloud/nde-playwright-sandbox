@@ -6,6 +6,12 @@ on:
     paths:
       - 'pw06/**'
       - '.github/workflows/pw08-regression.yml'
+  pull_request:
+    branches:
+      - research/pw07-playwright-regression
+    paths:
+      - 'pw06/**'
+      - '.github/workflows/pw08-regression.yml'
   workflow_dispatch:
 permissions:
   contents: read
